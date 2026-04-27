@@ -61,14 +61,12 @@ GO
 <img width="1918" height="1078" alt="image" src="https://github.com/user-attachments/assets/0d690d30-f09f-42a3-8454-9b2a4ec1df51" />
 
 ### 1.2. Thiết lập các bảng dữ liệu
-#### a) Bảng `[SanPham]`:
-- Sử dụng `[MaSanPham]` làm Khóa chính `(PK)`, thiết lập `IDENTITY(1,1)` để mã tự động tăng, giúp quản lý danh mục dễ dàng.
+#### a) Bảng `[SanPham]`: Đây là bảng lưu trữ thông tin gốc của các loại mỹ phẩm có trong cửa hàng.
+- `[MaSanPham]`: Làm Khóa chính `(PK)`, dùng [INT] để tối ưu bộ nhớ cho các trường làm khóa. Kết hợp với IDENTITY(1,1) để hệ thống tự sinh mã duy nhất, không trùng lặp.
 
-- Tên sản phẩm dùng `NVARCHAR` để lưu trữ đầy đủ tiếng Việt có dấu.
+- `[TenSanPham]`: Dùng NVARCHAR để hỗ trợ lưu tiếng Việt có dấu cho tên mỹ phẩm (ví dụ: Nước tẩy trang, Kem chống nắng).
 
-- Giá bán dùng kiểu `MONEY` để tối ưu tính toán tiền tệ và có ràng buộc `CHECK` giá phải lớn hơn 0.
-
-- Số lượng tồn kho có ràng buộc `CHECK` không được phép nhỏ hơn 0 để đảm bảo tính chính xác của kho hàng.
+- `[GiaBan]`: Dùng MONEY để đảm bảo độ chính xác cao khi tính toán tiền tệ, tránh sai số như kiểu Float.
 
 ```
 CREATE TABLE [SanPham] (
@@ -83,12 +81,14 @@ CREATE TABLE [SanPham] (
 ```
 <img width="1918" height="1078" alt="image" src="https://github.com/user-attachments/assets/081d34d6-9571-49e9-b177-28e29180e1c6" />
 
-#### b) Bảng `[HoaDon]`:
-- Sử dụng `[MaHoaDon]` làm Khóa chính `(PK)` tự động tăng.
+#### b) Bảng `[HoaDon]`: Bảng này lưu trữ thông tin tổng quát về các lần giao dịch với khách hàng.
+- `[MaHoaDon]`: Làm Khóa chính `(PK)` tự động tăng. 
 
-- Trường `[NgayLap]` sử dụng kiểu `DATETIME` với giá trị mặc định là `GETDATE()`, giúp hệ thống tự động ghi nhận thời điểm phát sinh giao dịch.
+- `[NgayLap]`: Dùng DATETIME để lưu chính xác cả ngày và giờ khách mua hàng. Sử dụng DEFAULT GETDATE() để hệ thống tự động lấy giờ máy chủ khi lập hóa đơn.
 
-- Trường `[TongTien]` mặc định khởi tạo bằng 0 và sẽ được cập nhật sau khi tính toán các chi tiết hóa đơn.
+- `[TongTien]`: Mặc định khởi tạo bằng 0 và sẽ được cập nhật sau khi tính toán các chi tiết hóa đơn.
+- `[TenKhachHang]`: Dùng NVARCHAR để lưu tên khách hàng có dấu.
+  
 ```
 CREATE TABLE [HoaDon] (
     [MaHoaDon] INT IDENTITY(1,1) NOT NULL,
@@ -100,15 +100,13 @@ CREATE TABLE [HoaDon] (
 ```
 <img width="1918" height="1078" alt="image" src="https://github.com/user-attachments/assets/accbbc3a-8dc6-402e-a2f2-ba84538dc095" />
 
-#### c) Bảng `[ChiTietHoaDon]`:
-- Đây là bảng trung gian thể hiện quan hệ nhiều - nhiều `( n-n )` giữa `HoaDon` và `SanPham`.
+#### c) Bảng `[ChiTietHoaDon]`: Đây là bảng quan trọng nhất để thiết lập quan hệ Nhiều - Nhiều (n-n) giữa bảng `[Hoa đon]` và bảng `[San pham]`.
 
-- Sử dụng Khóa chính hỗn hợp (Composite Key) gồm `[MaHoaDon]` và `[MaSanPham]`.
+- Sử dụng Khóa chính hỗn hợp (Composite PK): Kết hợp cả `[MaHoaDon]` và `[MaSanPham]` làm khóa chính. Điều này đảm bảo trong một hóa đơn, mỗi loại mỹ phẩm chỉ xuất hiện một lần (nếu mua thêm thì cộng dồn số lượng).
 
 - Chứa 2 Khóa ngoại `(FK)` tham chiếu trực tiếp đến bảng `HoaDon` và `SanPham` để đảm bảo tính toàn vẹn (không thể bán sản phẩm không tồn tại).
 
-- Số lượng mua có ràng buộc `CHECK` phải lớn hơn 0. Đơn giá bán thực tế được lưu lại để quản lý biến động giá tại thời điểm giao dịch.
-
+- `[DonGiaBan]`: Được lưu riêng tại đây để chốt giá tại thời điểm bán, tránh việc giá sản phẩm trong kho thay đổi làm sai lệch lịch sử hóa đơn cũ.
 ```
 CREATE TABLE [ChiTietHoaDon] (
     [MaHoaDon] INT NOT NULL,
@@ -123,3 +121,84 @@ CREATE TABLE [ChiTietHoaDon] (
 ```
 <img width="1918" height="1078" alt="image" src="https://github.com/user-attachments/assets/66bdf8a0-0f4b-4a58-9946-c29b40652b6b" />
 
+### 1.3. Chèn dữ liệu mẫu vào các bảng
+
+Sau khi hoàn thiện cấu trúc các bảng, em tiến hành chèn dữ liệu mẫu để kiểm tra tính toàn vẹn và chuẩn bị dữ liệu cho các phần tính toán tiếp theo.
+
+```sql
+INSERT INTO [SanPham] ([TenSanPham], [GiaBan], [SoLuongTon])
+VALUES 
+    (N'Son MAC Ruby Woo', 550000, 50),
+    (N'Nước tẩy trang Bioderma 500ml', 395000, 10),    
+    (N'Kem chống nắng La Roche-Posay', 485000, 30),
+    (N'Serum Estee Lauder Advanced Night Repair', 2500000, 15), 
+    (N'Sữa rửa mặt Cerave Hydrating', 370000, 40);
+GO
+
+
+INSERT INTO [HoaDon] ([TenKhachHang]) 
+VALUES 
+    (N'Nguyễn Đăng Thịnh'), 
+    (N'Vũ Hoàng Long'),
+    (N'Đỗ Phương Thảo'),
+    (N'Trần Minh Khôi');
+GO
+
+INSERT INTO [ChiTietHoaDon] ([MaHoaDon], [MaSanPham], [SoLuongMua], [DonGiaBan])
+VALUES (1, 1, 10, 550000);
+
+INSERT INTO [ChiTietHoaDon] ([MaHoaDon], [MaSanPham], [SoLuongMua], [DonGiaBan])
+VALUES 
+    (2, 2, 1, 395000),
+    (2, 3, 1, 485000);
+
+INSERT INTO [ChiTietHoaDon] ([MaHoaDon], [MaSanPham], [SoLuongMua], [DonGiaBan])
+VALUES (3, 4, 1, 2500000);
+
+INSERT INTO [ChiTietHoaDon] ([MaHoaDon], [MaSanPham], [SoLuongMua], [DonGiaBan])
+VALUES (4, 5, 2, 370000);
+GO
+
+SELECT * FROM [SanPham];
+SELECT * FROM [HoaDon];
+SELECT * FROM [ChiTietHoaDon];
+```
+<img width="1918" height="1078" alt="image" src="https://github.com/user-attachments/assets/61bd12cd-cb9f-4482-908d-02a612e66d98" />
+
+## PHẦN 2: XÂY DỰNG FUNCTION 
+
+### 2.1. Các loại hàm có sẵn (Built-in Functions)
+SQL Server cung cấp hàng trăm hàm có sẵn để xử lý dữ liệu, được chia thành các nhóm chính:
+* **Hàm chuỗi (String Functions):** `LEN()`, `SUBSTRING()`, `REPLACE()`, `UPPER()`...
+* **Hàm ngày tháng (Date/Time Functions):** `GETDATE()`, `DAY()`, `MONTH()`, `YEAR()`, `DATEDIFF()`...
+* **Hàm toán học (Mathematical Functions):** `ROUND()`, `ABS()`, `CEILING()`, `FLOOR()`...
+* **Hàm chuyển đổi (Conversion Functions):** `CAST()`, `CONVERT()`, `FORMAT()`...
+* **Hàm hệ thống (System/Logical Functions):** `ISNULL()`, `IIF()`, `COALESCE()`...
+---
+
+### Sử dụng một số Built - in functions
+
+`FORMAT()` - Định dạng bảng giá :
+Trong cơ sở dữ liệu, giá bán được lưu ở dạng số thực (kiểu `MONEY`) để phục vụ tính toán. Tuy nhiên, khi in ra hóa đơn cho khách, con số `2500000.0000` trông rất thiếu chuyên nghiệp. Em sử dụng hàm `FORMAT()` để tự động biến đổi nó thành chuỗi tiền tệ có dấu phẩy phân cách hàng nghìn.
+
+```sql
+SELECT 
+    [MaSanPham], 
+    [TenSanPham], 
+    [GiaBan] AS [GiaGoc_HeThong],
+    FORMAT([GiaBan], 'N0') + N' VNĐ' AS [GiaNiemYet_HienThi]
+FROM [SanPham];
+```
+<img width="1917" height="1073" alt="image" src="https://github.com/user-attachments/assets/6b446db8-d15f-43f0-9438-43603e8f297f" />
+
+`IIF()` - Rẽ nhánh nhanh gọn kiểm tra tồn kho:
+Thay vì phải viết câu lệnh CASE WHEN ... THEN dài dòng, hàm IIF() (If and Only If) cho phép kiểm tra một điều kiện logic và trả về kết quả ngay lập tức. Em dùng hàm này để quét nhanh xem mỹ phẩm nào còn hàng, mỹ phẩm nào đã hết.
+```
+SELECT 
+    [TenSanPham], 
+    [SoLuongTon],
+    IIF([SoLuongTon] > 0, N'Còn hàng', N'Đã hết hàng') AS [TinhTrangKho]
+FROM [SanPham];
+```
+<img width="1918" height="1078" alt="image" src="https://github.com/user-attachments/assets/301a3b34-f541-432c-b7ca-dd4607165d6c" />
+*Hình: Kiểm tra tình trạng kho của từng loại mỹ phẩm*
