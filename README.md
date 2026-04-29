@@ -477,6 +477,7 @@ EXEC [dbo].[sp_InBienLaiChiTiet] @MaHD = 2;
 _SP xuất biên lai thanh toán. Thử in biên lai cho Hóa đơn số 2_
 
 ## Phần 4: Trigger và Xử lý logic nghiệp vụ
+## Yêu cầu 1: Trigger tự động cập nhật bảng B khi bảng A thay đổi
 ### 4.1. Trigger tự động trừ tồn kho (AFTER INSERT)
 - **Ý tưởng:** Ở Phần 3, em đã dùng SP để trừ tồn kho khi bán hàng. Tuy nhiên, rủi ro là nếu nhân viên dùng lệnh `INSERT` chèn trực tiếp dữ liệu vào bảng `[ChiTietHoaDon]` (không thông qua SP), kho sẽ không bị trừ. Trigger này giải quyết triệt để lỗ hổng đó. Bất cứ khi nào có một giao dịch mới được ghi nhận, kho tự động giảm đi.
 
@@ -512,7 +513,7 @@ SELECT * FROM [SanPham] WHERE [MaSanPham] = 3;
 
 _Trigger tự động trừ kho. Khách mua thêm Sản phẩm số 3 (số lượng 1, giá 450k) vào Hóa đơn số 1_
 
-## 4.2. Trigger kiểm toán lịch sử giá bán (AFTER UPDATE
+### 4.2. Trigger kiểm toán lịch sử giá bán (AFTER UPDATE
 - **Ý tưởng:** Giá mỹ phẩm thay đổi liên tục theo các chương trình Sale. Quản lý cần biết giá cũ là bao nhiêu, đổi thành giá mới là bao nhiêu và đổi khi nào. Em thiết kế một Trigger để tự động "nghe lén" hành động sửa giá và ghi chép lại vào một bảng nhật ký (Audit Log).
 
 - **Phân tích thuật toán:**
@@ -566,7 +567,7 @@ SELECT * FROM [LichSuGia];
 
 _Trigger kiểm toán. Thử tăng giá Son MAC (Mã 1) từ 550k lên 600k_
 
-## 4.3. Trigger bảo vệ dữ liệu nhạy cảm (INSTEAD OF DELETE)
+### 4.3. Trigger bảo vệ dữ liệu nhạy cảm (INSTEAD OF DELETE)
 - **Ý tưởng:** Dữ liệu hóa đơn là chứng từ tài chính cực kỳ quan trọng, tuyệt đối không được phép xóa (kể cả xóa nhầm). Kẻ gian có thể xóa hóa đơn để bỏ túi tiền bán hàng. Em viết một Trigger chặn đứng mọi lệnh DELETE nhắm vào bảng Hóa Đơn.
 
 - **Phân tích thuật toán:**
@@ -600,3 +601,203 @@ SELECT * FROM [HoaDon];
 
 _Khởi tạo Trigger chống xóa hóa đơn. Cố tình xóa Hóa đơn số 1 và sẽ thấy cảnh báo an ninh_
 
+## Yêu cầu 2: Trigger cho Bảng A (Vòng lặp A -> B rồi B -> A)
+
+### 4.4. Thí nghiệm vòng lặp Trigger.
+- Để thực hiện thí nghiệm này, em tiến hành thiết lập hai Trigger liên quan đến việc đồng bộ Giá bán giữa bảng `[SanPham]` (Bảng A) và bảng `[ChiTietHoaDon]` (Bảng B).
+
+**Bước 1: Viết Trigger A $\rightarrow$ B**
+
+Khi cửa hàng đổi giá gốc của Sản phẩm, hệ thống tự động cập nhật giá mới đó vào các Chi tiết hóa đơn
+
+```
+CREATE TRIGGER [dbo].[trg_A_Update_B]
+ON [SanPham]
+AFTER UPDATE
+AS
+BEGIN
+  
+    IF UPDATE([GiaBan])
+    BEGIN
+        UPDATE C
+        SET C.[DonGiaBan] = I.[GiaBan]
+        FROM [ChiTietHoaDon] C
+        JOIN Inserted I ON C.[MaSanPham] = I.[MaSanPham];
+        
+        PRINT N'Trigger A->B: Đã cập nhật giá từ Sản Phẩm sang Chi Tiết Hóa Đơn.';
+    END
+END;
+GO
+```
+
+<img width="1918" height="1078" alt="image" src="https://github.com/user-attachments/assets/654aa8de-9b31-489a-9055-bb1d988c9610" />
+
+_Cập nhật giá từ Sản Phẩm sang Chi Tiết Hóa Đơn_
+
+**Bước 2: Viết Trigger B $\rightarrow$ A**
+
+- Khi nhân viên sửa đơn giá bán trong Chi tiết hóa đơn, hệ thống tự động cập nhật ngược lại làm giá gốc cho Sản phẩm đó
+
+```
+CREATE TRIGGER [dbo].[trg_B_Update_A]
+ON [ChiTietHoaDon]
+AFTER UPDATE
+AS
+BEGIN
+   
+    IF UPDATE([DonGiaBan])
+    BEGIN
+        UPDATE S
+        SET S.[GiaBan] = I.[DonGiaBan]
+        FROM [SanPham] S
+        JOIN Inserted I ON S.[MaSanPham] = I.[MaSanPham];
+        
+        PRINT N'Trigger B->A: Đã cập nhật giá từ Chi Tiết Hóa Đơn ngược về Sản Phẩm.';
+    END
+END;
+GO
+```
+
+<img width="1918" height="1078" alt="image" src="https://github.com/user-attachments/assets/8b3bbc6a-8261-4fda-b157-ad581f257709" />
+
+_Cập nhật giá từ Chi Tiết Hóa Đơn ngược về Sản Phẩm_
+
+**Bước 3: Thực thi lệnh kích hoạt và Quan sát thông báo**
+
+- Em tiến hành chạy một lệnh `UPDATE` đơn giản để đổi giá Son MAC
+
+```
+UPDATE [SanPham] SET [GiaBan] = 650000 WHERE [MaSanPham] = 1;
+```
+
+<img width="1918" height="1078" alt="image" src="https://github.com/user-attachments/assets/0c469e8f-7e74-43a4-aad4-e8f516cd7ad2" />
+
+_Thử test kích hoạt vòng lặp_
+
+**Bước 4: Giải thích thông báo hệ thống và Rút ra nhận xét**
+
+- **Thông báo lỗi nhận được:** `Maximum stored procedure, function, trigger, or view nesting level exceeded (limit 32).`
+  
+- **Giải thích:** Khi lệnh `UPDATE SanPham` chạy, nó gọi `trg_A_Update_B`. Trigger này đi cập nhật bảng `ChiTietHoaDon`. Việc bảng `ChiTietHoaDon` bị cập nhật lại đánh thức `trg_B_Update_A` chạy. Trigger này lại đi cập nhật `SanPham`, khiến `trg_A_Update_B` bị gọi lần thứ hai... Quá trình này tạo ra một vòng lặp vô hạn. SQL Server có cơ chế bảo vệ máy chủ bằng cách giới hạn độ sâu lồng nhau của các đối tượng tối đa là 32 tầng (level 32). Khi vòng lặp chạm ngưỡng 32, hệ thống lập tức "cắt cầu dao", hủy bỏ toàn bộ giao dịch và báo lỗi trên.
+
+- **Nhận xét cuối cùng:** Trong thiết kế cơ sở dữ liệu thực tế, việc thiết lập Trigger lồng nhau (Nested Triggers) tạo ra sự phụ thuộc vòng tròn là tối kỵ. Nó không chỉ gây ra lỗi vượt quá giới hạn lồng như thí nghiệm trên mà còn làm giảm hiệu suất hệ thống một cách nghiêm trọng do khóa bảng liên tục. Kiến trúc sư dữ liệu cần phân tích kỹ luồng chạy của dữ liệu để thiết kế logic cập nhật một chiều.
+
+## Phần 5: Cursor và Duyệt dữ liệu
+### 5.1. Sử dụng CURSOR để duyệt và xử lý dữ liệu
+
+- **Bài toán:**
+Nhân dịp xả kho cuối năm, quản lý cửa hàng muốn điều chỉnh giá bán tự động dựa trên số lượng tồn kho: Nếu tồn kho > 40 hộp (Hàng ế): Giảm giá 10% để đẩy hàng. Nếu tồn kho < 10 hộp (Hàng hiếm): Tăng giá thêm 5%. Còn lại: Giữ nguyên giá.
+
+- **Giải quyết bằng CURSOR:**
+Đoạn script dưới đây sẽ dùng Cursor duyệt qua từng dòng của bảng Sản Phẩm, kiểm tra điều kiện tồn kho của từng món và tiến hành cập nhật lại giá. Em sử dụng lệnh `SET STATISTICS TIME ON` để đo lường chính xác thời gian máy chủ thực thi.
+
+```
+SET STATISTICS TIME ON;
+GO
+
+PRINT N'--- BẮT ĐẦU CHẠY BẰNG CURSOR ---';
+
+
+DECLARE @MaSP INT, @TonKho INT, @GiaHienTai MONEY, @GiaMoi MONEY;
+
+DECLARE cur_DieuChinhGia CURSOR FOR 
+SELECT [MaSanPham], [SoLuongTon], [GiaBan] FROM [SanPham];
+
+
+OPEN cur_DieuChinhGia;
+
+
+FETCH NEXT FROM cur_DieuChinhGia INTO @MaSP, @TonKho, @GiaHienTai;
+
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+
+    IF @TonKho > 40
+        SET @GiaMoi = @GiaHienTai * 0.9; -- Giảm 10%
+    ELSE IF @TonKho < 10
+        SET @GiaMoi = @GiaHienTai * 1.05; -- Tăng 5%
+    ELSE
+        SET @GiaMoi = @GiaHienTai; -- Giữ nguyên
+
+ 
+    UPDATE [SanPham] 
+    SET [GiaBan] = @GiaMoi 
+    WHERE [MaSanPham] = @MaSP;
+
+  
+    FETCH NEXT FROM cur_DieuChinhGia INTO @MaSP, @TonKho, @GiaHienTai;
+END;
+
+
+CLOSE cur_DieuChinhGia;
+DEALLOCATE cur_DieuChinhGia;
+
+PRINT N'--- KẾT THÚC CHẠY BẰNG CURSOR ---';
+
+
+SET STATISTICS TIME OFF;
+GO
+```
+
+<img width="1918" height="1078" alt="image" src="https://github.com/user-attachments/assets/702bd660-07c7-4100-94ac-10b0dc94bfcc" />
+
+_Thời gian thực thi (Execution Times) khi sử dụng CURSOR để cập nhật giá bán từng dòng (Row-by-row)_
+
+
+## 5.2. Giải quyết bài toán không dùng CURSOR (Set-based) và So sánh tốc độ
+
+Trong SQL Server, việc dùng Cursor bị coi là "Anti-pattern" (cách làm không khuyến khích) cho các thao tác Cập nhật dữ liệu. Bài toán xả kho ở trên hoàn toàn có thể giải quyết gọn gàng bằng SQL thuần (Set-based) kết hợp với lệnh `CASE WHEN`.
+
+```
+SET STATISTICS TIME ON;
+GO
+
+PRINT N'--- BẮT ĐẦU CHẠY BẰNG SQL THUẦN (SET-BASED) ---';
+
+
+UPDATE [SanPham]
+SET [GiaBan] = CASE
+    WHEN [SoLuongTon] > 40 THEN [GiaBan] * 0.9
+    WHEN [SoLuongTon] < 10 THEN [GiaBan] * 1.05
+    ELSE [GiaBan]
+END;
+
+PRINT N'--- KẾT THÚC CHẠY BẰNG SQL THUẦN ---';
+
+
+SET STATISTICS TIME OFF;
+GO
+```
+
+<img width="1918" height="1078" alt="image" src="https://github.com/user-attachments/assets/34518081-c056-4b47-a181-7c2782150e90" />
+
+_Thời gian thực thi khi sử dụng truy vấn SQL thuần (Set-based) - Chỉ tốn 1 lần quét bảng duy nhất_
+
+**Nhận xét và So sánh tốc độ:**
+
+- **Bản chất hoạt động:** Cursor hoạt động theo cơ chế RBAR (Row-By-Agonizing-Row - Xử lý khổ sở từng dòng). Với 10.000 sản phẩm, Cursor phải chạy lệnh `UPDATE` 10.000 lần, gây nghẽn cổ chai (Bottleneck) mạng và khóa bảng liên tục. Trong khi đó, truy vấn SQL thuần (Set-based) xử lý toàn bộ 10.000 sản phẩm dưới dạng một tập hợp (Set) chỉ với 1 lệnh UPDATE duy nhất.
+
+- **So sánh thời gian (Dựa trên ảnh chụp màn hình):** Thời gian `CPU time` và `elapsed time` của lệnh SQL thuần luôn nhỏ hơn rất nhiều (gần như bằng 0ms trên lượng dữ liệu nhỏ) so với Cursor. Nếu dữ liệu lên tới hàng triệu dòng, SQL thuần chỉ mất vài giây, còn Cursor có thể treo máy chủ hàng giờ.
+
+## 5.3. Bài toán "độc quyền" chỉ CURSOR mới giải quyết được
+Dù bị hạn chế trong việc cập nhật dữ liệu hàng loạt, CURSOR lại là công cụ "độc tôn" không thể thay thế trong các bài toán yêu cầu tương tác với hệ thống bên ngoài hoặc thực thi các thủ tục động (Dynamic SQL) cho từng dòng riêng biệt.
+
+*Ví dụ: Gửi Email/SMS chúc mừng sinh nhật khách hàng VIP.*
+
+Cửa hàng Mỹ phẩm cần gửi email tự động kèm mã Voucher riêng biệt cho các khách hàng có sinh nhật trong tháng.
+
+- Tại sao SQL thuần (Set-based) không giải quyết được?
+Truy vấn SQL thuần hoạt động theo nguyên lý xử lý đồng loạt một tập hợp dữ liệu (Set-based). Câu lệnh `SELECT` hay `UPDATE` thông thường chỉ nhào nặn được dữ liệu bên trong nội bộ Database chứ không có khả năng tự động gửi email. Để giao tiếp với hệ thống bên ngoài, SQL Server phải dùng thủ tục hệ thống `sp_send_dbmail`. Mặc dù thủ tục này có thể gửi một email cho nhiều người cùng lúc, nhưng nội dung bức thư sẽ bị cố định giống hệt nhau cho tất cả người nhận. SQL thuần hoàn toàn bó tay vì nó không có cơ chế lặp để tự cá nhân hóa nội dung thư (đổi tên người nhận, cấp mã Voucher riêng) cho từng người trong một câu lệnh duy nhất.
+
+- Giải pháp duy nhất là CURSOR (Xử lý Row-by-row):
+
+Dùng Cursor `SELECT` ra danh sách khách hàng VIP có sinh nhật trong tháng này.
+
+Duyệt qua từng khách hàng một.
+
+Ở mỗi vòng lặp: Hệ thống bóc tách thông tin, nối chuỗi để tạo ra một nội dung email mang tính cá nhân hóa cao (VD: "Chào Mỹ Mỹ, tặng riêng bạn mã Voucher...").
+
+Gọi thủ tục `EXEC msdb.dbo.sp_send_dbmail` để gửi đích danh bức thư vừa tạo cho khách hàng hiện tại.
+
+Lặp lại quy trình trên cho đến khi hết danh sách
