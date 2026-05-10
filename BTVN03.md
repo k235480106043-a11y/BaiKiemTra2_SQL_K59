@@ -111,14 +111,22 @@ GO
 
 ---
 ### Event 1: Đăng ký hợp đồng mới (Vay tiền)
-**Yêu cầu: Viết Store Procedure tiếp nhận hợp đồng: Lưu thông tin khách hàng, danh sách tài sản
-(kèm giá trị định giá), số tiền vay gốc và thiết lập 2 mốc Deadline1, Deadline2.**
+
+**Yêu cầu:**  
+Viết Store Procedure dùng để khởi tạo hợp đồng vay, lưu thông tin khoản vay và thiết lập hai mốc thời hạn `Deadline1`, `Deadline2`.
+
+Thông tin tài sản cầm cố sẽ được lưu bổ sung vào bảng `TaiSan` sau khi hợp đồng được tạo thành công.
 
 ```
 -- =============================================
 -- EVENT 1: ĐĂNG KÝ HỢP ĐỒNG MỚI
 -- =============================================
+
+DROP PROCEDURE IF EXISTS sp_TaoHopDong
+GO
+
 CREATE PROCEDURE sp_TaoHopDong
+(
     @KhachHangID    INT,
     @NhanVienID     INT,
     @SoTienVay      DECIMAL(18,2),
@@ -126,41 +134,67 @@ CREATE PROCEDURE sp_TaoHopDong
     @SoNgayHanD1    INT,
     @SoNgayHanD2    INT,
     @GhiChu         NVARCHAR(500) = NULL
+)
 AS
 BEGIN
+
     SET NOCOUNT ON;
 
-   
-    DECLARE @Deadline1  DATE = DATEADD(DAY, @SoNgayHanD1, @NgayVay);
-    DECLARE @Deadline2  DATE = DATEADD(DAY, @SoNgayHanD2, @NgayVay);
-    DECLARE @HopDongID  INT;
+    DECLARE @Deadline1 DATE =
+        DATEADD(DAY, @SoNgayHanD1, @NgayVay);
 
-  
-    INSERT INTO HopDong (
-        KhachHangID, NhanVienID, SoTienVayGoc,
-        NgayVay, Deadline1, Deadline2,
-        TrangThai, GhiChu
+    DECLARE @Deadline2 DATE =
+        DATEADD(DAY, @SoNgayHanD2, @NgayVay);
+
+    DECLARE @HopDongID INT;
+
+
+    INSERT INTO HopDong
+    (
+        KhachHangID,
+        NhanVienID,
+        SoTienVayGoc,
+        NgayVay,
+        Deadline1,
+        Deadline2,
+        TrangThai,
+        GhiChu
     )
-    VALUES (
-        @KhachHangID, @NhanVienID, @SoTienVay,
-        @NgayVay, @Deadline1, @Deadline2,
-        N'Đang vay', @GhiChu
+    VALUES
+    (
+        @KhachHangID,
+        @NhanVienID,
+        @SoTienVay,
+        @NgayVay,
+        @Deadline1,
+        @Deadline2,
+        N'Đang vay',
+        @GhiChu
     );
 
-    
+
     SET @HopDongID = SCOPE_IDENTITY();
 
-   
-    INSERT INTO LichSuTrangThai (
-        HopDongID, TrangThaiCu, TrangThaiMoi, GhiChu
+
+    INSERT INTO LichSuTrangThai
+    (
+        HopDongID,
+        TrangThaiCu,
+        TrangThaiMoi,
+        GhiChu
     )
-    VALUES (
-        @HopDongID, NULL, N'Đang vay', N'Tạo hợp đồng mới'
+    VALUES
+    (
+        @HopDongID,
+        NULL,
+        N'Đang vay',
+        N'Tạo hợp đồng mới'
     );
 
-    
+
     SELECT @HopDongID AS HopDongID;
-END;
+
+END
 GO
 ```
 
@@ -170,12 +204,6 @@ GO
 #### **Test case: Thực thi Event 1 - Đăng ký hợp đồng vay tiền mới**
 
 ```
-INSERT INTO NhanVien (HoTen, SoDienThoai, ChucVu)
-VALUES (N'Nguyễn Văn An', '0901234567', N'Quản lý');
-
-INSERT INTO KhachHang (HoTen, SoDienThoai, CMND_CCCD, DiaChi)
-VALUES (N'Lê Văn Cường', '0933111222', '036012345678', N'Hà Nội');
-
 EXEC sp_TaoHopDong
     @KhachHangID = 1,
     @NhanVienID  = 1,
@@ -183,20 +211,65 @@ EXEC sp_TaoHopDong
     @NgayVay     = '2025-03-01',
     @SoNgayHanD1 = 30,
     @SoNgayHanD2 = 60,
-    @GhiChu      = N'Vay tiền mua hàng';
+    @GhiChu      = N'Vay tiền mua hàng'
+GO
 
-SELECT * FROM HopDong;
 
-SELECT * FROM LichSuTrangThai;
+SELECT * FROM HopDong
+GO
+
+
+INSERT INTO TaiSan
+(
+    HopDongID,
+    TenTaiSan,
+    MoTa,
+    GiaTriDinhGia
+)
+VALUES
+(
+    2,
+    N'iPhone 13 Pro Max',
+    N'256GB màu xanh',
+    15000000
+),
+(
+    2,
+    N'Laptop Dell Inspiron',
+    N'Core i5 RAM 8GB',
+    12000000
+)
+GO
 ```
 
+<img width="1917" height="1077" alt="image" src="https://github.com/user-attachments/assets/2cf3daed-2bc9-4875-9ebe-999ae8d15056" />
 
-<img width="1918" height="1078" alt="image" src="https://github.com/user-attachments/assets/2a7d7da3-9122-42f7-9972-c8d567258b27" />
 
 #### **Nhận xét & Giải thích logic:**
-Chạy thử Store Procedure khởi tạo hợp đồng. Kết quả trả về cho thấy hệ thống đã xử lý hoàn hảo các nghiệp vụ cốt lõi:
-1. **Tính toán Deadline tự động & chính xác:** Khi truyền tham số đầu vào là `NgayVay = '2025-03-01'`, số ngày hạn 1 (30 ngày) và hạn 2 (60 ngày), hệ thống đã dùng hàm ngày tháng trong SQL để tự động tính ra `Deadline 1 là 2025-03-31` và `Deadline 2 là 2025-04-30`. Điều này giúp nhân viên không phải tự nhẩm ngày.
-2. **Đảm bảo tính toàn vẹn dữ liệu (Transaction):** Bảng kết quả thứ 2 cho thấy ngay khi Hợp đồng mới (ID=2) được tạo, một bản ghi tương ứng đã được tự động chèn vào bảng `LichSuTrangThai` với `TrangThaiCu = NULL` và `TrangThaiMoi = 'Đang vay'`. Việc này đảm bảo mọi biến động của hợp đồng đều được tracking (lưu vết) đầy đủ ngay từ giây phút đầu tiên.
+
+Chạy thử Store Procedure khởi tạo hợp đồng cho thấy hệ thống đã xử lý chính xác các nghiệp vụ chính của bài toán quản lý tiệm cầm đồ:
+
+1. **Tự động tính Deadline hợp đồng:**  
+Khi truyền vào ngày vay `2025-03-01`, thời hạn `Deadline1 = 30 ngày` và `Deadline2 = 60 ngày`, hệ thống sử dụng hàm xử lý ngày tháng của SQL Server để tự động tính:
+- `Deadline1 = 2025-03-31`
+- `Deadline2 = 2025-04-30`
+
+Việc tính tự động giúp hạn chế sai sót khi nhập liệu thủ công và hỗ trợ quản lý thời gian vay chính xác hơn.
+
+2. **Tự động lưu lịch sử trạng thái hợp đồng:**  
+Ngay sau khi hợp đồng được tạo thành công, hệ thống tự động thêm dữ liệu vào bảng `LichSuTrangThai` với:
+- `TrangThaiCu = NULL`
+- `TrangThaiMoi = 'Đang vay'`
+
+Điều này giúp theo dõi toàn bộ quá trình thay đổi trạng thái của hợp đồng trong suốt vòng đời hoạt động.
+
+3. **Quản lý tài sản thế chấp:**  
+Sau khi tạo hợp đồng, hệ thống tiếp tục lưu danh sách tài sản cầm cố vào bảng `TaiSan`, bao gồm:
+- tên tài sản
+- mô tả tài sản
+- giá trị định giá
+
+Một hợp đồng có thể quản lý nhiều tài sản khác nhau, phù hợp với nghiệp vụ thực tế của hệ thống cầm đồ.
 
 ---
 ### Event 2: Tính toán công nợ thời gian thực 
@@ -556,7 +629,14 @@ GO
 ### Event 3: Xử lý trả nợ và hoàn trả tài sản
 
 ```
-ALTER PROCEDURE sp_ThanhToanHopDong
+-- =============================================
+-- EVENT 3: XỬ LÝ THANH TOÁN HỢP ĐỒNG
+-- =============================================
+
+DROP PROCEDURE IF EXISTS sp_ThanhToanHopDong
+GO
+
+CREATE PROCEDURE sp_ThanhToanHopDong
 (
     @HopDongID     INT,
     @NhanVienID    INT,
@@ -570,23 +650,46 @@ BEGIN
 
     DECLARE @TongNo           DECIMAL(18,2)
     DECLARE @ConNo            DECIMAL(18,2)
-    DECLARE @TrangThai        NVARCHAR(100)
+
+    DECLARE @TrangThaiCu      NVARCHAR(100)
+    DECLARE @TrangThaiMoi     NVARCHAR(100)
+
     DECLARE @Deadline2        DATE
+
+    DECLARE @TongGiaTriTS     DECIMAL(18,2)
+
     DECLARE @IsSold           BIT
 
 
     -- =============================================
-    -- Lấy thông tin hợp đồng
+    -- KIỂM TRA HỢP ĐỒNG TỒN TẠI
+    -- =============================================
+    IF NOT EXISTS
+    (
+        SELECT 1
+        FROM HopDong
+        WHERE HopDongID = @HopDongID
+    )
+    BEGIN
+
+        PRINT N'Hợp đồng không tồn tại';
+        RETURN;
+
+    END
+
+
+    -- =============================================
+    -- LẤY THÔNG TIN HỢP ĐỒNG
     -- =============================================
     SELECT
-        @TrangThai = TrangThai,
-        @Deadline2 = Deadline2
+        @TrangThaiCu = TrangThai,
+        @Deadline2   = Deadline2
     FROM HopDong
     WHERE HopDongID = @HopDongID
 
 
     -- =============================================
-    -- Kiểm tra tài sản đã thanh lý chưa
+    -- KIỂM TRA TÀI SẢN ĐÃ THANH LÝ
     -- =============================================
     SELECT
         @IsSold =
@@ -603,24 +706,37 @@ BEGIN
        AND @IsSold = 1
     BEGIN
 
-        PRINT N'Tài sản đã bị thanh lý. Không thể thu tiền hoặc trả tài sản.';
+        PRINT N'Tài sản đã bị thanh lý. Không thể tiếp tục thanh toán.';
         RETURN;
 
     END
 
 
     -- =============================================
-    -- Tính tổng công nợ hiện tại
+    -- TÍNH TỔNG CÔNG NỢ
     -- =============================================
     SET @TongNo =
-        dbo.fn_CalcMoneyContract(
+        dbo.fn_CalcMoneyContract
+        (
             @HopDongID,
             @NgayTra
         )
 
 
     -- =============================================
-    -- Tính số nợ còn lại
+    -- KIỂM TRA SỐ TIỀN TRẢ
+    -- =============================================
+    IF @SoTienTra <= 0
+    BEGIN
+
+        PRINT N'Số tiền thanh toán không hợp lệ';
+        RETURN;
+
+    END
+
+
+    -- =============================================
+    -- TÍNH DƯ NỢ CÒN LẠI
     -- =============================================
     SET @ConNo = @TongNo - @SoTienTra
 
@@ -629,7 +745,7 @@ BEGIN
 
 
     -- =============================================
-    -- Ghi nhận giao dịch thanh toán
+    -- GHI NHẬN GIAO DỊCH
     -- =============================================
     INSERT INTO GiaoDich
     (
@@ -654,13 +770,16 @@ BEGIN
 
 
     -- =============================================
-    -- Nếu đã trả hết nợ
+    -- XỬ LÝ TRẠNG THÁI HỢP ĐỒNG
     -- =============================================
     IF @ConNo = 0
     BEGIN
 
+        SET @TrangThaiMoi = N'Đã thanh toán đủ'
+
+
         UPDATE HopDong
-        SET TrangThai = N'Đã thanh toán đủ'
+        SET TrangThai = @TrangThaiMoi
         WHERE HopDongID = @HopDongID
 
 
@@ -676,8 +795,11 @@ BEGIN
     ELSE
     BEGIN
 
+        SET @TrangThaiMoi = N'Đang trả góp'
+
+
         UPDATE HopDong
-        SET TrangThai = N'Đang trả góp'
+        SET TrangThai = @TrangThaiMoi
         WHERE HopDongID = @HopDongID
 
 
@@ -687,38 +809,81 @@ BEGIN
 
 
     -- =============================================
-    -- Hiển thị thông tin sau thanh toán
+    -- GHI LỊCH SỬ TRẠNG THÁI
     -- =============================================
-    SELECT
-        @TongNo AS TongNoTruocKhiTra,
-        @SoTienTra AS SoTienKhachTra,
-        @ConNo AS DuNoConLai
+    INSERT INTO LichSuTrangThai
+    (
+        HopDongID,
+        TrangThaiCu,
+        TrangThaiMoi,
+        GhiChu
+    )
+    VALUES
+    (
+        @HopDongID,
+        @TrangThaiCu,
+        @TrangThaiMoi,
+        N'Cập nhật trạng thái sau thanh toán'
+    )
 
 
     -- =============================================
-    -- Gợi ý tài sản phù hợp với dư nợ
+    -- TỔNG GIÁ TRỊ TÀI SẢN CÒN GIỮ
     -- =============================================
     SELECT
-        TaiSanID,
-        TenTaiSan,
-        GiaTriDinhGia,
-        TrangThai
+        @TongGiaTriTS =
+            ISNULL(SUM(GiaTriDinhGia), 0)
     FROM TaiSan
     WHERE HopDongID = @HopDongID
-      AND GiaTriDinhGia >= @ConNo
+      AND TrangThai <> N'Đã bán thanh lý'
+
+
+    -- =============================================
+    -- HIỂN THỊ THÔNG TIN THANH TOÁN
+    -- =============================================
+    SELECT
+        @TongNo           AS TongNoTruocKhiTra,
+        @SoTienTra        AS SoTienKhachTra,
+        @ConNo            AS DuNoConLai,
+        @TongGiaTriTS     AS TongGiaTriTaiSan
+
+
+    -- =============================================
+    -- KIỂM TRA KHẢ NĂNG ĐẢM BẢO CÔNG NỢ
+    -- =============================================
+    IF @TongGiaTriTS >= @ConNo
+    BEGIN
+
+        PRINT N'Giá trị tài sản vẫn đảm bảo đủ cho dư nợ còn lại';
+
+    END
+    ELSE
+    BEGIN
+
+        PRINT N'Cảnh báo: Giá trị tài sản thấp hơn dư nợ còn lại';
+
+    END
 
 END
 GO
 ```
 
-<img width="1917" height="1077" alt="image" src="https://github.com/user-attachments/assets/cd411ab3-8f16-4d93-a2ca-ac03c7261821" />
+<img width="1917" height="1077" alt="image" src="https://github.com/user-attachments/assets/58c7e8a8-2df3-4b9d-b24c-24fbcec86038" />
+
 
 #### **Test case: Thực thi Event 3 - PROCEDURE: sp_ThanhToanHopDong**
-**TRƯỜNG HỢP 1: Khách thanh toán một phần công nợ**
+#### **TRƯỜNG HỢP 1: Khách thanh toán một phần công nợ**
+**Giả sử:**
 - Hợp đồng ID = 2
-- Khách trả thêm 1.000.000đ
--  Sau thanh toán: Hợp đồng chuyển sang "Đang trả góp". Hệ thống ghi nhận giao dịch mới. Vẫn còn dư nợ
+- Khách thanh toán thêm 1.000.000đ
+- Ngày thanh toán: `2025-03-25`
 
+**Kỳ vọng:**
+- Hệ thống ghi nhận giao dịch thanh toán mới
+- Dư nợ giảm tương ứng
+- Trạng thái hợp đồng chuyển sang: `"Đang trả góp"`
+- Hệ thống lưu lịch sử thay đổi trạng thái vào bảng `LichSuTrangThai`
+  
 ```
 EXEC sp_ThanhToanHopDong
     @HopDongID  = 2,
@@ -731,19 +896,24 @@ SELECT * FROM GiaoDich
 WHERE HopDongID = 2
 GO
 
-SELECT TrangThai
-FROM HopDong
+SELECT * FROM LichSuTrangThai
 WHERE HopDongID = 2
 GO
 ```
 
-<img width="1917" height="1077" alt="image" src="https://github.com/user-attachments/assets/90d6e5dc-4a4d-4a2f-bfef-495de57b6b54" />
+<img width="1917" height="1077" alt="image" src="https://github.com/user-attachments/assets/4055e056-a97c-40b2-b362-63b4c76b7a3e" />
 
 #### **TRƯỜNG HỢP 2: Khách thanh toán toàn bộ công nợ còn lại**
-- Sau thanh toán:
-- Hợp đồng chuyển sang "Đã thanh toán đủ"
-- Tài sản được trả lại cho khách
-- Dư nợ còn lại = 0
+**Giả sử:**
+- Hợp đồng ID = 2
+- Khách thanh toán toàn bộ dư nợ còn lại
+- Ngày thanh toán: `2025-04-01`
+
+**Kỳ vọng:**
+- Hợp đồng chuyển sang trạng thái `"Đã thanh toán đủ"`
+- Tài sản cầm cố được cập nhật trạng thái `"Đã trả khách"`
+- Dư nợ còn lại bằng `0`
+- Hệ thống tiếp tục ghi nhận lịch sử trạng thái hợp đồng
 
 ```
 EXEC sp_ThanhToanHopDong
@@ -753,18 +923,26 @@ EXEC sp_ThanhToanHopDong
     @NgayTra    = '2025-04-01'
 GO
 
-SELECT TrangThai
+
+SELECT
+    HopDongID,
+    TrangThai
 FROM HopDong
 WHERE HopDongID = 2
 GO
 
-SELECT *
-FROM TaiSan
+
+SELECT * FROM TaiSan
+WHERE HopDongID = 2
+GO
+
+
+SELECT * FROM LichSuTrangThai
 WHERE HopDongID = 2
 GO
 ```
 
-<img width="1917" height="1077" alt="image" src="https://github.com/user-attachments/assets/f5cfd80a-13fc-407b-9bf0-ea3b6bf9821a" />
+<img width="1917" height="1077" alt="image" src="https://github.com/user-attachments/assets/6db411ca-091b-4342-bf85-78fdc7b63c79" />
 
 ---
 ### Event 4: Truy vấn danh sách nợ xấu (Nợ khó đòi)
@@ -847,47 +1025,89 @@ GO
 ---
 ### Event 5: Quản lý thanh lý tài sản
 
-#### **Tạo 3 TRIGGER**
-**TRIGGER 1: trg_HopDong_NoXau**
-- Chuyển trạng thái hợp đồng thành: *"Quá hạn (nợ xấu)"*
-- Điều kiện:
-`Hợp đồng đang ở trạng thái "Đang vay"`
-`Ngày hiện tại đã vượt Deadline1`
+Để tự động hóa quá trình xử lý nợ xấu và thanh lý tài sản trong hệ thống cầm đồ, hệ thống sử dụng các `TRIGGER` để theo dõi trạng thái hợp đồng và cập nhật trạng thái tài sản tương ứng.
 
-**TRIGGER 2: trg_TaiSan_SanSangThanhLy**
-- Chuyển trạng thái tài sản thành: "Sẵn sàng thanh lý"
-- Điều kiện:
-` Hợp đồng đang ở trạng thái "Quá hạn (nợ xấu)"`
-` Ngày hiện tại vượt Deadline2`
+#### **TRIGGER 1: trg_HopDong_NoXau**
+**Chức năng:**  
+Tự động chuyển trạng thái hợp đồng sang `"Quá hạn (nợ xấu)"`.
 
-**TRIGGER 3: trg_TaiSan_DaThanhLy**
-- Chuyển trạng thái tài sản thành: "Đã bán thanh lý"
-- Điều kiện:
-`Hợp đồng chuyển sang trạng thái "Đã thanh lý"`
+**Điều kiện kích hoạt:**
+- Hợp đồng đang có trạng thái `"Đang vay"`
+- Ngày hiện tại đã vượt quá `Deadline1`
+
+**Ý nghĩa:**  
+Giúp hệ thống tự động phát hiện các hợp đồng quá hạn thanh toán để đưa vào nhóm nợ xấu mà không cần cập nhật thủ công.
+
+
+#### **TRIGGER 2: trg_TaiSan_SanSangThanhLy**
+**Chức năng:**  
+Tự động chuyển trạng thái tài sản sang `"Sẵn sàng thanh lý"`.
+
+**Điều kiện kích hoạt:**
+- Hợp đồng đã ở trạng thái `"Quá hạn (nợ xấu)"`
+- Ngày hiện tại đã vượt quá `Deadline2`
+
+**Ý nghĩa:**  
+Cho phép hệ thống xác định các tài sản đủ điều kiện xử lý thanh lý do khách hàng đã quá hạn thanh toán quá lâu.
+
+
+#### **TRIGGER 3: trg_TaiSan_DaThanhLy**
+**Chức năng:**  
+Tự động cập nhật trạng thái tài sản thành `"Đã bán thanh lý"` và đánh dấu tài sản đã được bán.
+
+**Điều kiện kích hoạt:**
+- Hợp đồng chuyển sang trạng thái `"Đã thanh lý"`
+
+**Ý nghĩa:**  
+Đảm bảo trạng thái tài sản luôn đồng bộ với trạng thái cuối cùng của hợp đồng trong quá trình thanh lý.
 
 ```
+-- =============================================
+-- EVENT 5: QUẢN LÝ THANH LÝ TÀI SẢN
+-- =============================================
+
+DROP TRIGGER IF EXISTS trg_HopDong_NoXau
+GO
+
+DROP TRIGGER IF EXISTS trg_TaiSan_SanSangThanhLy
+GO
+
+DROP TRIGGER IF EXISTS trg_TaiSan_DaThanhLy
+GO
+
+
+-- =============================================
+-- TRIGGER 1:
+-- CHUYỂN HỢP ĐỒNG SANG NỢ XẤU
+-- =============================================
+
 CREATE TRIGGER trg_HopDong_NoXau
 ON HopDong
 AFTER UPDATE
 AS
 BEGIN
 
-    UPDATE HopDong
+    SET NOCOUNT ON;
+
+    UPDATE HD
     SET TrangThai = N'Quá hạn (nợ xấu)'
+    FROM HopDong HD
+    INNER JOIN inserted I
+        ON HD.HopDongID = I.HopDongID
 
-    WHERE HopDongID IN
-    (
-        SELECT HopDongID
-        FROM inserted
-    )
-
-    AND TrangThai = N'Đang vay'
-    AND GETDATE() > Deadline1
+    WHERE
+        I.TrangThai = N'Đang vay'
+        AND GETDATE() > HD.Deadline1
+        AND HD.TrangThai <> N'Quá hạn (nợ xấu)'
 
 END
 GO
 
 
+-- =============================================
+-- TRIGGER 2:
+-- TÀI SẢN SẴN SÀNG THANH LÝ
+-- =============================================
 
 CREATE TRIGGER trg_TaiSan_SanSangThanhLy
 ON HopDong
@@ -895,22 +1115,29 @@ AFTER UPDATE
 AS
 BEGIN
 
-    UPDATE TaiSan
-    SET TrangThai = N'Sẵn sàng thanh lý'
+    SET NOCOUNT ON;
 
-    WHERE HopDongID IN
-    (
-        SELECT HopDongID
-        FROM inserted
-        WHERE
-            TrangThai = N'Quá hạn (nợ xấu)'
-            AND GETDATE() > Deadline2
-    )
+    UPDATE TS
+    SET TrangThai = N'Sẵn sàng thanh lý'
+    FROM TaiSan TS
+    INNER JOIN inserted I
+        ON TS.HopDongID = I.HopDongID
+    INNER JOIN HopDong HD
+        ON HD.HopDongID = I.HopDongID
+
+    WHERE
+        I.TrangThai = N'Quá hạn (nợ xấu)'
+        AND GETDATE() > HD.Deadline2
+        AND TS.TrangThai <> N'Sẵn sàng thanh lý'
 
 END
 GO
 
 
+-- =============================================
+-- TRIGGER 3:
+-- ĐÃ BÁN THANH LÝ TÀI SẢN
+-- =============================================
 
 CREATE TRIGGER trg_TaiSan_DaThanhLy
 ON HopDong
@@ -918,20 +1145,27 @@ AFTER UPDATE
 AS
 BEGIN
 
-    UPDATE TaiSan
-    SET TrangThai = N'Đã bán thanh lý'
+    SET NOCOUNT ON;
 
-    WHERE HopDongID IN
-    (
-        SELECT HopDongID
-        FROM inserted
-        WHERE TrangThai = N'Đã thanh lý'
-    )
+    UPDATE TS
+    SET
+        TrangThai = N'Đã bán thanh lý',
+        IsSold = 1,
+        NgayCapNhat = GETDATE()
+
+    FROM TaiSan TS
+    INNER JOIN inserted I
+        ON TS.HopDongID = I.HopDongID
+
+    WHERE
+        I.TrangThai = N'Đã thanh lý'
+        AND TS.TrangThai <> N'Đã bán thanh lý'
 
 END
 GO
 ```
-<img width="1917" height="1077" alt="image" src="https://github.com/user-attachments/assets/35f15815-b93b-44f7-9ac6-d31760b904d5" />
+
+<img width="1917" height="1077" alt="image" src="https://github.com/user-attachments/assets/092cec65-1a91-46c0-aa09-ec0733e14605" />
 
 #### **Test case: Thực thi Event 5 - QUẢN LÝ THANH LÝ TÀI SẢN**
 **TEST TRIGGER 1**
@@ -945,13 +1179,17 @@ WHERE HopDongID = 2
 GO
 
 
-SELECT HopDongID, TrangThai
+SELECT
+    HopDongID,
+    TrangThai,
+    Deadline1
 FROM HopDong
 WHERE HopDongID = 2
 GO
+
 ```
 
-<img width="1917" height="1077" alt="image" src="https://github.com/user-attachments/assets/d8d56285-b3b0-4711-9c96-a2f9314495cb" />
+<img width="1917" height="1077" alt="image" src="https://github.com/user-attachments/assets/f9f856b9-6514-47b5-b367-a73252ba347f" />
 
 
 **TEST TRIGGER 2**
@@ -965,15 +1203,22 @@ WHERE HopDongID = 2
 GO
 
 
-SELECT *
+SELECT
+    TaiSanID,
+    TenTaiSan,
+    TrangThai
 FROM TaiSan
 WHERE HopDongID = 2
 GO
 ```
-<img width="1917" height="1077" alt="image" src="https://github.com/user-attachments/assets/f39aaa1f-ea1a-4d3c-8efb-9a5191eefa8a" />
+<img width="1917" height="1077" alt="image" src="https://github.com/user-attachments/assets/1e8c0f83-38b9-4f49-9863-f9acd6b97488" />
+
 
 **TEST TRIGGER 3**
-- Khi hợp đồng chuyển sang: "Đã thanh lý" Trigger sẽ tự động cập nhật trạng thái tài sản thành: "Đã bán thanh lý"
+
+- Khi hợp đồng chuyển sang: "Đã thanh lý"
+- Trigger sẽ tự động cập nhật trạng thái tài sản thành: "Đã bán thanh lý"
+- Đồng thời đánh dấu IsSold = 1
 
 ```
 UPDATE HopDong
@@ -982,11 +1227,16 @@ WHERE HopDongID = 2
 GO
 
 
-SELECT *
+SELECT
+    TaiSanID,
+    TenTaiSan,
+    TrangThai,
+    IsSold
 FROM TaiSan
 WHERE HopDongID = 2
 GO
 ```
 
-<img width="1917" height="1077" alt="image" src="https://github.com/user-attachments/assets/23d7478c-5334-4f47-bd08-6e64c65bdf86" />
+<img width="1912" height="1077" alt="image" src="https://github.com/user-attachments/assets/db9d7549-ca96-48b8-a18c-27301ce329d2" />
+
 
