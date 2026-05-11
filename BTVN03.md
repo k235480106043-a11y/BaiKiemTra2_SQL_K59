@@ -109,6 +109,45 @@ GO
 
 <img width="1918" height="1078" alt="image" src="https://github.com/user-attachments/assets/eb16c940-994e-4798-aeee-eb70c4a44c11" />
 
+
+## Khởi tạo các bảng
+- KhachHang
+- HopDong
+- GiaoDich
+- TaiSan
+- NhanVien
+- LichSuTrangThai
+
+## Sơ đồ ERD
+
+<img width="1911" height="1077" alt="image" src="https://github.com/user-attachments/assets/125737dd-c54d-4fd0-8897-7a77485eebd6" />
+
+## Phân tích thực thể và quan hệ
+
+| Thực thể | Vai trò | Quan hệ |
+|---|---|---|
+| KhachHang | Người cầm đồ | 1 khách hàng có nhiều hợp đồng |
+| HopDong | Hợp đồng vay | 1 hợp đồng có nhiều giao dịch và tài sản |
+| TaiSan | Tài sản thế chấp | Thuộc về 1 hợp đồng |
+| GiaoDich | Lịch sử thanh toán | Nhiều giao dịch thuộc 1 hợp đồng |
+| NhanVien | Nhân viên xử lý | 1 nhân viên quản lý nhiều hợp đồng/giao dịch |
+| LichSuTrangThai | Theo dõi trạng thái | 1 hợp đồng có nhiều lần đổi trạng thái |
+
+```
+KhachHang (1) ──────────< HopDong (N)
+                               │
+                ┌──────────────┼──────────────┐
+                │              │              │
+                v              v              v
+           GiaoDich       TaiSan     LichSuTrangThai
+              (N)           (N)              (N)
+
+
+NhanVien (1) ─────────────< HopDong (N)
+
+NhanVien (1) ────────────< GiaoDich (N)
+```
+
 ---
 ### Event 1: Đăng ký hợp đồng mới (Vay tiền)
 
