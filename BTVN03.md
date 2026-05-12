@@ -118,7 +118,7 @@ GO
 - NhanVien
 - LichSuTrangThai
 
-## Sơ đồ ERD
+## Sơ đồ ERD trên SQL 
 
 <img width="1911" height="1077" alt="image" src="https://github.com/user-attachments/assets/125737dd-c54d-4fd0-8897-7a77485eebd6" />
 
